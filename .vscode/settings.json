@@ -1,0 +1,15 @@
+{
+    "cSpell.words": [
+        "dataframe",
+        "dayofweek",
+        "dropna",
+        "dtype",
+        "fastapi",
+        "fillna",
+        "isin",
+        "notna"
+    ],
+    "cSpell.ignoreWords": [
+        "pelicula"
+    ]
+}
