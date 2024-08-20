@@ -3,11 +3,24 @@ import pandas as pd
 import ast
 import numpy as np
 import calendar
+import requests
+from io import StringIO
 
 app = FastAPI()
 
 # Cargar el dataset
-movies_df = pd.read_csv('movies_dataset.csv')
+def download_public_gdrive_file(file_id):
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    response = requests.get(url)
+    response.raise_for_status()  # Verifica que la descarga fue exitosa
+    return pd.read_csv(StringIO(response.text))
+# Cargar el primer dataset desde Google Drive
+movies_df = download_public_gdrive_file('1Rp7SNuoRnmdoQMa5LWXuK4i7W1ILblYb')
+
+# Cargar el segundo dataset desde Google Drive
+credits_df = download_public_gdrive_file('1lMGJUWVVVRPO00ZWqzEJZIxFhSqtfmAB')
+
+
 # Aplicar las transformaciones previas
 # Aquí incluirías el código que ya usaste para limpiar los datos.
 movies_df['revenue'] = movies_df['revenue'].fillna(0)
@@ -85,7 +98,7 @@ def votos_titulo(titulo: str):
 
 @app.get("/get_actor/{nombre_actor}")
 def get_actor(nombre_actor: str):
-    credits_df = pd.read_csv('credits.csv')  # Cargar el archivo de créditos
+    
     actor_films = credits_df[credits_df['cast'].str.contains(nombre_actor, case=False, na=False)]
     
     if not actor_films.empty:
