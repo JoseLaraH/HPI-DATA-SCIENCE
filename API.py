@@ -10,9 +10,13 @@ app = FastAPI()
 
 # Cargar el dataset
 def download_public_gdrive_file(file_id):
+    '''
+    Esta función toma el ID del archivo y lo combina con la url de google drive para buscarlo y descargarlo, 
+    de este modo nos evitamos subir los datos en formatos csv al repositorio. 
+    Esto se hizo debido a que los datos pesaban mucho para subirlos al repositorio
+    '''
     url = f"https://drive.google.com/uc?export=download&id={file_id}"
     response = requests.get(url)
-    response.raise_for_status()  # Verifica que la descarga fue exitosa
     return pd.read_csv(StringIO(response.text))
 # Cargar el primer dataset desde Google Drive
 movies_df = download_public_gdrive_file('1Rp7SNuoRnmdoQMa5LWXuK4i7W1ILblYb')
@@ -49,6 +53,27 @@ movies_df['production_countries'] = movies_df['production_countries'].apply(
 movies_df['spoken_languages'] = movies_df['spoken_languages'].apply(
     lambda x: ', '.join([d['name'] for d in ast.literal_eval(x)]) if isinstance(x, str) and x.startswith('[') else np.nan
 )
+
+# Eliminar las últimas 40,000 filas
+credits_df = credits_df.iloc[:-40000]
+# Desanidar la columna 'cast'
+credits_df['cast'] = credits_df['cast'].apply(ast.literal_eval)
+
+# Desanidar la columna 'crew'
+credits_df['crew'] = credits_df['crew'].apply(ast.literal_eval)
+# Expandir los diccionarios anidados en la columna 'cast'
+cast_df = credits_df.explode('cast').reset_index(drop=True)
+cast_df = pd.json_normalize(cast_df['cast'])
+
+# Expandir los diccionarios anidados en la columna 'crew'
+crew_df = credits_df.explode('crew').reset_index(drop=True)
+crew_df = pd.json_normalize(crew_df['crew'])
+# Agregar la columna 'id' correspondiente al DataFrame 'cast'
+cast_df['id'] = credits_df['id'].repeat(credits_df['cast'].apply(len)).reset_index(drop=True)
+
+# Agregar la columna 'id' correspondiente al DataFrame 'crew'
+crew_df['id'] = credits_df['id'].repeat(credits_df['crew'].apply(len)).reset_index(drop=True)
+
 # Definir las funciones para cada endpoint
 @app.get("/cantidad_filmaciones_mes/{mes}")
 def cantidad_filmaciones_mes(mes: str):
@@ -68,9 +93,27 @@ def cantidad_filmaciones_mes(mes: str):
 
 @app.get("/cantidad_filmaciones_dia/{dia}")
 def cantidad_filmaciones_dia(dia: str):
+    # Mapeo de días en español a días en inglés
+    dias_espanol_a_ingles = {
+        "lunes": "Monday",
+        "martes": "Tuesday",
+        "miércoles": "Wednesday",
+        "jueves": "Thursday",
+        "viernes": "Friday",
+        "sábado": "Saturday",
+        "domingo": "Sunday"
+    }
+
+    # Convertir el día en español a inglés
+    dia_en_ingles = dias_espanol_a_ingles.get(dia.lower())
+
+    if not dia_en_ingles:
+        return {"error": "Día no válido. Por favor, ingrese un día válido."}
+
     # Convertir el día a número (0 = lunes, 6 = domingo)
-    day_number = list(calendar.day_name).index(dia.capitalize())
+    day_number = list(calendar.day_name).index(dia_en_ingles)
     count = movies_df[movies_df['release_date'].dt.dayofweek == day_number].shape[0]
+
     return {"mensaje": f"{count} cantidad de películas fueron estrenadas en los días {dia}"}
 
 @app.get("/score_titulo/{titulo}")
@@ -98,16 +141,20 @@ def votos_titulo(titulo: str):
 
 @app.get("/get_actor/{nombre_actor}")
 def get_actor(nombre_actor: str):
-    
-    actor_films = credits_df[credits_df['cast'].str.contains(nombre_actor, case=False, na=False)]
+    # Filtrar las películas donde aparece el actor
+    actor_films = cast_df[cast_df['name'].str.contains(nombre_actor, case=False, na=False)]
     
     if not actor_films.empty:
-        film_count = actor_films.shape[0]
+        film_count = actor_films['id'].nunique()  # Contar películas únicas
         total_return = movies_df[movies_df['id'].isin(actor_films['id'])]['return'].sum()
         avg_return = total_return / film_count
-        return {"mensaje": f"El actor {nombre_actor} ha participado de {film_count} cantidad de filmaciones, el mismo ha conseguido un retorno de {total_return} con un promedio de {avg_return} por filmación"}
+        return {
+            "mensaje": f"El actor {nombre_actor} ha participado de {film_count} filmaciones, "
+                       f"obteniendo un retorno total de {total_return} con un promedio de {avg_return:.2f} por filmación."
+        }
     else:
         return {"mensaje": f"El actor {nombre_actor} no fue encontrado en el dataset."}
+
 
 @app.get("/get_director/{nombre_director}")
 def get_director(nombre_director: str):

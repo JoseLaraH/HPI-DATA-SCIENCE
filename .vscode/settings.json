@@ -7,6 +7,7 @@
         "dtype",
         "fastapi",
         "fillna",
+        "iloc",
         "isin",
         "notna",
         "Uvicorn"
