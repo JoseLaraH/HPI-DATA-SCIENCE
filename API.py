@@ -17,13 +17,9 @@ def download_public_gdrive_file(file_id):
     '''
     url = f"https://drive.google.com/uc?export=download&id={file_id}"
     response = requests.get(url)
-    return pd.read_csv(StringIO(response.text))
+    return pd.read_csv(StringIO(response.text), low_memory=False)
 # Cargar el primer dataset desde Google Drive
 movies_df = download_public_gdrive_file('1Rp7SNuoRnmdoQMa5LWXuK4i7W1ILblYb')
-
-# Cargar el segundo dataset desde Google Drive
-credits_df = download_public_gdrive_file('1lMGJUWVVVRPO00ZWqzEJZIxFhSqtfmAB')
-
 
 # Aplicar las transformaciones previas
 # Aquí incluirías el código que ya usaste para limpiar los datos.
@@ -54,25 +50,37 @@ movies_df['spoken_languages'] = movies_df['spoken_languages'].apply(
     lambda x: ', '.join([d['name'] for d in ast.literal_eval(x)]) if isinstance(x, str) and x.startswith('[') else np.nan
 )
 
+# Cargar el segundo dataset desde Google Drive
+credits_df = pd.read_csv('credits.csv')
+
 # Eliminar las últimas 42,000 filas
 credits_df = credits_df.iloc[:-42000]
-# Desanidar la columna 'cast'
-credits_df['cast'] = credits_df['cast'].apply(ast.literal_eval)
 
-# Desanidar la columna 'crew'
-credits_df['crew'] = credits_df['crew'].apply(ast.literal_eval)
-# Expandir los diccionarios anidados en la columna 'cast'
-cast_df = credits_df.explode('cast').reset_index(drop=True)
-cast_df = pd.json_normalize(cast_df['cast'])
+# Desanidar las columnas 'cast' y 'crew'
+def extraer_director(crew_list):
+    try:
+        list_aux = ast.literal_eval(crew_list)
+        for dic in list_aux:
+            if dic.get('job') == 'Director':
+                return dic.get('name', 'no register')
+        return 'no register'
+    except (ValueError, SyntaxError):
+        return 'no register'
 
-# Expandir los diccionarios anidados en la columna 'crew'
-crew_df = credits_df.explode('crew').reset_index(drop=True)
-crew_df = pd.json_normalize(crew_df['crew'])
-# Agregar la columna 'id' correspondiente al DataFrame 'cast'
-cast_df['id'] = credits_df['id'].repeat(credits_df['cast'].apply(len)).reset_index(drop=True)
+def extraer_cast(cast_list):
+    try:
+        if cast_list != '[]':
+            list_aux = ast.literal_eval(cast_list)
+            return ', '.join([dic['name'] for dic in list_aux])
+        else:
+            return 'no register'
+    except:
+        return 'no register'
+credits_df.columns = ['cast1', 'crew', 'id']
+credits_df['cast_limpio'] = credits_df["cast1"].apply(extraer_cast)
+credits_df['director'] = credits_df['crew'].apply(extraer_director)
 
-# Agregar la columna 'id' correspondiente al DataFrame 'crew'
-crew_df['id'] = credits_df['id'].repeat(credits_df['crew'].apply(len)).reset_index(drop=True)
+credits_df = credits_df[['id', 'cast_limpio', 'director']]
 
 # Definir las funciones para cada endpoint
 @app.get("/cantidad_filmaciones_mes/{mes}")
@@ -141,16 +149,20 @@ def votos_titulo(titulo: str):
 
 @app.get("/get_actor/{nombre_actor}")
 def get_actor(nombre_actor: str):
-    
-    actor_films = credits_df[credits_df['cast'].str.contains(nombre_actor, case=False, na=False)]
+    # Filtrar las películas donde aparece el actor
+    actor_films = credits_df[credits_df['name'].str.contains(nombre_actor, case=False, na=False)]
     
     if not actor_films.empty:
-        film_count = actor_films.shape[0]
+        film_count = actor_films['id'].nunique()  # Contar películas únicas
         total_return = movies_df[movies_df['id'].isin(actor_films['id'])]['return'].sum()
         avg_return = total_return / film_count
-        return {"mensaje": f"El actor {nombre_actor} ha participado de {film_count} cantidad de filmaciones, el mismo ha conseguido un retorno de {total_return} con un promedio de {avg_return} por filmación"}
+        return {
+            "mensaje": f"El actor {nombre_actor} ha participado de {film_count} filmaciones, "
+            f"obteniendo un retorno total de {total_return} con un promedio de {avg_return:.2f} por filmación."
+        }
     else:
         return {"mensaje": f"El actor {nombre_actor} no fue encontrado en el dataset."}
+
 
 
 @app.get("/get_director/{nombre_director}")
