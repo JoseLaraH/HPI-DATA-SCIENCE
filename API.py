@@ -54,8 +54,8 @@ movies_df['spoken_languages'] = movies_df['spoken_languages'].apply(
     lambda x: ', '.join([d['name'] for d in ast.literal_eval(x)]) if isinstance(x, str) and x.startswith('[') else np.nan
 )
 
-# Eliminar las últimas 40,000 filas
-credits_df = credits_df.iloc[:-40000]
+# Eliminar las últimas 42,000 filas
+credits_df = credits_df.iloc[:-42000]
 # Desanidar la columna 'cast'
 credits_df['cast'] = credits_df['cast'].apply(ast.literal_eval)
 
@@ -141,17 +141,14 @@ def votos_titulo(titulo: str):
 
 @app.get("/get_actor/{nombre_actor}")
 def get_actor(nombre_actor: str):
-    # Filtrar las películas donde aparece el actor
-    actor_films = cast_df[cast_df['name'].str.contains(nombre_actor, case=False, na=False)]
+    
+    actor_films = credits_df[credits_df['cast'].str.contains(nombre_actor, case=False, na=False)]
     
     if not actor_films.empty:
-        film_count = actor_films['id'].nunique()  # Contar películas únicas
+        film_count = actor_films.shape[0]
         total_return = movies_df[movies_df['id'].isin(actor_films['id'])]['return'].sum()
         avg_return = total_return / film_count
-        return {
-            "mensaje": f"El actor {nombre_actor} ha participado de {film_count} filmaciones, "
-                       f"obteniendo un retorno total de {total_return} con un promedio de {avg_return:.2f} por filmación."
-        }
+        return {"mensaje": f"El actor {nombre_actor} ha participado de {film_count} cantidad de filmaciones, el mismo ha conseguido un retorno de {total_return} con un promedio de {avg_return} por filmación"}
     else:
         return {"mensaje": f"El actor {nombre_actor} no fue encontrado en el dataset."}
 

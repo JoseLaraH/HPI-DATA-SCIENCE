@@ -10,6 +10,7 @@
         "iloc",
         "isin",
         "notna",
+        "nunique",
         "Uvicorn"
     ],
     "cSpell.ignoreWords": [
