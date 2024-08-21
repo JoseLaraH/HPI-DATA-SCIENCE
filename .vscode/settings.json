@@ -2,12 +2,14 @@
     "cSpell.words": [
         "dataframe",
         "dayofweek",
+        "disponibilizar",
         "dropna",
         "dtype",
         "fastapi",
         "fillna",
         "isin",
-        "notna"
+        "notna",
+        "Uvicorn"
     ],
     "cSpell.ignoreWords": [
         "MGJUWVVVRPO",
